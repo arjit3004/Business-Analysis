@@ -1,0 +1,517 @@
+---
+title: "HW1 The sugar problem"
+author: "Zidong Liu"
+date: "09/29/2016"
+output: html_document
+---
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(knitr)
+library(ggplot2)
+library(plotly)
+library(dplyr)
+library(stargazer)
+solution.print=TRUE
+code.print=FALSE
+help.print = TRUE
+```
+
+<br>
+<br>
+
+#### 1. Load the data from Sugar.csv into R. Provide a summary of the variables.
+
+<br>
+
+```{r,echo=FALSE, eval=TRUE, cache=FALSE, tidy=TRUE, size='normalsize', results="asis",message=FALSE, warning=FALSE}
+
+setwd("E:/core/course/columbia course/16Fall/Business Analytics/hw/hw1")
+SugarData = read.csv("Sugar.csv")
+stargazer(SugarData,type= 'html', header = FALSE, title = 'Summary of Sugar.csv')
+attach(SugarData)
+```
+<br>
+<br>
+
+#### 2. Run a regression to predict the rating using sugar level.
+
+<br>
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+lm1 = lm(rating ~ sugar)
+#summary(lm1)
+```
+
+```{r echo=FALSE, eval=TRUE, cache=FALSE, tidy=TRUE, size='small', results="asis",message=FALSE, warning=FALSE}
+lm1 = lm(rating ~ sugar)
+stargazer(lm1,type= 'html', title = 'Linear regression: rating ~ sugar', header = FALSE)
+predict1 = predict(lm1,SugarData)
+
+```
+
+
+<br>
+
+According to the table, this linear model has a positive constant and a positive but close to 0 coefficient of sugar (0.004) that indicates the rating may increase very slightly as the sugar level goes up.  
+
+The result of linear regression that only consider sugar level to predict ratings has a very low R-square (0.001) value and adjusted R-square (0.001), which means very little proportion of the variance in the data is explained by the model. But for all the variables (intercept and sugar) we see the relative p-values are less than 0.05, so we can reject the null hypothesis that the relative coefficient \beta = 0
+
+In sum, the variables may be significant but the model is bad.
+
+*Note:* 
+
+the table is produced by package "stargazer", which uses Signif.code:  
+0 '3 star' 0.01 '2 star' 0.05 '1 star' 0.1   
+
+R summary() uses Signif. codes:  
+0 '3 star' 0.001 '2 star' 0.01 '1 star' 0.05 '.' 0.1 ' ' 1
+
+<br>
+
+#### 3. Run a regression to predict the rating using all the variables.
+
+<br>
+
+```{r, echo=FALSE, eval=TRUE, cache=FALSE, tidy=TRUE, size='small', results="asis",message=FALSE, warning=FALSE}
+
+lm2 = lm(rating ~ sugar+rowing_team+track_team+chess_club)
+stargazer(lm2,type= 'html', title = 'Linear regression: rating ~ all variables', header = FALSE)
+predict2 = predict(lm2, SugarData)
+
+```
+
+<br>
+
+Compared to previous model, the model covers all the variables seems better since it has a larger R-square (0.673) value and adjusted R-square (0.672). All the variables has p<0.05, which indicate other than sugar, being in rowing team, track team, chess club or not may also affect people's rating on the drinks.
+
+<br>
+
+\newpage
+
+#### 4. Make a plot of rating vs sugar consuption.
+
+<br>
+
+```{r, echo=FALSE, eval=TRUE, cache=FALSE, tidy=TRUE, size='small', results="asis",message=FALSE, warning=FALSE}
+
+plot_ly(data = SugarData, x = ~sugar, y = ~rating, mode = "markers", type="scatter",color = sugar) %>%
+layout(title = 'Rating VS Sugar Level')
+```
+
+<br>
+
+Above is the plot of rating vs sugar and a bifurcation is obvious. Two clusters shows different trends.
+
+Then compare the previous models with data:   
+(prediction 1: 1st model rating ~ sugar;  
+ prediction 2: 2nd model rating ~ all. )
+
+<br>
+
+```{r, echo=FALSE, eval=TRUE, warning= FALSE}
+plot_ly(data = SugarData, x = ~sugar, y = ~rating, mode = "markers",type="scatter",name = 'data') %>%
+  add_trace(data = SugarData, x = ~sugar, y = ~predict1, mode = "markers", type="scatter",name = 'prediction 1') %>%
+  add_trace(data = SugarData, x = ~sugar, y = ~predict2, mode = "markers", type="scatter",name = 'prediction 2') %>%
+  layout(title = 'Rating VS Sugar Level')
+
+```
+
+<br>
+Neither model 1 nor model 2 are consistent with the plot of the original data.
+
+<br>
+
+#### 5. The marketing research suggests that people who are active in sports may react differently to sugary drinks. Create a new variable that indicates whether the student is active in at least one sports club (that is, either track or rowing). Split the data into two subsamples based on if the person sport active or inactive and  run a separate regression for each.
+
+<br>
+Create a variable "sport" which is 'TRUE' (1) if the player is active in at least one sports club (that is, either track or rowing) or 'FALSE' (0) otherwise. Seperate the sample into two team: sport (2,694 individuals) and nosport (2,656 individuals). Plot the seperate data with different colors
+
+<br>
+```{r, echo=FALSE, eval=TRUE, cache=FALSE, tidy=TRUE, size='small', results="asis",message=FALSE, warning=FALSE}
+sport = rowing_team | track_team
+#View(sport)
+#summary(sport)
+SugarData.adv = data.frame(SugarData,sport)
+SugarData.sport = subset(SugarData.adv, sport == TRUE)
+#View(SugarData.sport)
+SugarData.nosport = subset(SugarData.adv, sport == FALSE)
+
+plot_ly(data = SugarData.sport, x = ~sugar, y = ~rating, mode = "markers", type="scatter",name = 'sport active') %>%
+  add_trace(data = SugarData.nosport, x = ~sugar, y = ~rating, mode = "markers", type="scatter",name = 'sport inactive') %>%
+  layout(title = 'Rating VS Sugar Level: Sport active and inactive')
+```
+<br>
+
+The plot shows people who are active in sports may react to sugar very differently from people who are inactive. Run a separate regression for each:
+
+<br>
+
+Sport:
+
+```{r, echo=FALSE, eval=TRUE, cache=FALSE, tidy=TRUE, size='large', results="asis",message=FALSE, warning=FALSE}
+lm3.sport = lm(rating ~ sugar, data = SugarData.sport)
+stargazer(lm3.sport, type= 'html', title = 'Linear regression (sport): rating ~ sugar', header = FALSE)
+predict.sport = predict(lm3.sport,SugarData.sport)
+```
+
+<br>
+
+not sport:
+
+```{r, echo=FALSE, eval=TRUE, cache=FALSE, tidy=TRUE, size='large', results="asis",message=FALSE, warning=FALSE}
+lm3.nosport = lm(rating ~ sugar, data = SugarData.nosport)
+stargazer(lm3.nosport, type= 'html', title = 'Linear regression (nosport): rating ~ sugar', header = FALSE)
+predict.nosport = predict(lm3.nosport,SugarData.nosport)
+```
+
+<br>
+
+The result of sport sample gives a negative coefficient of sugar (-0.022) , which means they may rate the drinks lower the more sugar the drinks contain. On the other hand sport-inactive people tend to love sweeter beverages since they have a positive coefficient of sugar level. Compared with model 1, the seperate regressions improve the performance a lot given the adjusted R^2 are 0.253 and 0.418.    
+
+<br>
+
+Compare the predictions to original data and it seems that this time the regressions catch the trends
+
+<br>
+```{r, echo=FALSE, eval=TRUE, cache=FALSE, tidy=TRUE, size='small', results="asis",message=FALSE, warning=FALSE}
+plot_ly(data = SugarData.sport, x = ~sugar, y = ~rating, mode = "markers", type="scatter",name = 'sport active') %>%
+  add_trace(data = SugarData.nosport, x = ~sugar, y = ~rating, mode = "markers", type="scatter",name = 'sport inactive') %>%
+  add_trace(data = SugarData.sport, x = ~sugar, y = ~predict.sport, mode = "lines", name = 'sport active prediction') %>%
+  add_trace(data = SugarData.nosport, x = ~sugar, y = ~predict.nosport, mode = "lines", name = 'sport inactive prediction') %>%
+  layout(title = 'Rating VS Sugar Level: Sport active and inactive')
+```
+
+<br>
+
+#### 6. Run a single regression on the entire dataset that allows different students to react differently to sugar depending on whether they are active in sports. 
+
+We use sugar, sport and sugar*sport to fit the entire dataset:
+
+<br>
+```{r, echo=FALSE, eval=TRUE, cache=FALSE, tidy=TRUE, size='small', results="asis",message=FALSE, warning=FALSE}
+lm4 = lm(rating ~ sugar*sport, data = SugarData.adv)
+stargazer(lm4, type= 'html', title = 'Linear regression: rating ~ sugar+sport+sugar*sport', header = FALSE)
+```
+<br>
+Adjusted R^2 is 0.909, the highest among the linear models.
+
+<br>
+<br>
+
+```{r, echo=FALSE, eval=TRUE, cache=FALSE, tidy=TRUE, size='small', results="asis",message=FALSE, warning=FALSE}
+predict4 = predict(lm4, SugarData.adv)
+plot_ly(data = SugarData, x = ~sugar, y = ~rating, mode = 'markers', type="scatter",name = 'data') %>%
+  add_trace(data = SugarData, x = ~sugar, y = ~predict4, mode = 'markers', type="scatter",name = 'prediction') %>%
+  layout(title = 'Rating VS Sugar Level')
+```
+<br>
+
+The predictions follow the trends correctly.
+
+<br>
+
+#### 7. Randomly and evenly divide the data into a training and test dataset. What is the best model to predict drink ratings? Why?
+
+Divide the sample into a training and a test dataset
+
+<br>
+
+Training:
+
+```{r, echo=FALSE, eval=TRUE, cache=FALSE, tidy=TRUE, size='small', results="asis",message=FALSE, warning=FALSE}
+Sugar.train <- sample_frac(SugarData.adv, 0.5)
+sid <- as.numeric(rownames(Sugar.train))
+Sugar.test <- SugarData.adv[-sid,]
+stargazer(Sugar.train,type= 'html', header = FALSE, title = 'Summary of training data')
+
+```
+
+<br>
+
+Test:
+
+```{r, echo=FALSE, eval=TRUE, cache=FALSE, tidy=TRUE, size='small', results="asis",message=FALSE, warning=FALSE}
+stargazer(Sugar.test,type= 'html', header = FALSE, title = 'Summary of test data')
+```
+<br>
+
+Fit the linear model using:  
+
+1: sugar  
+2: sugar, rowing team, track team, chess club  
+3. sugar (sport active and inactive seperately)  
+4. sugar, sport, sugar*sport  
+<br>
+
+Accoding to the traditional method, the best model is the one with the largest Adjusted R^2
+
+<br>
+```{r, echo=FALSE, eval=TRUE, cache=FALSE, tidy=TRUE, size='small', results="asis",message=FALSE, warning=FALSE}
+# 7.1 traditional approach
+
+# model 1 rating ~ sugar
+
+lm1_t = lm(rating ~ sugar, data = Sugar.train)
+lm1_t.summ = summary(lm1_t)
+
+# model 2 rating ~ all
+lm2_t = lm(rating ~., data = Sugar.train)
+lm2_t.summ = summary(lm2_t)
+
+# model 3
+#sport_t = Sugar.train$rowing_team | Sugar.train$track_team
+#View(sport_t)
+Sugar.train.sport = subset(Sugar.train, sport == TRUE)
+Sugar.train.nosport = subset(Sugar.train, sport == FALSE)
+
+#plot_ly(data = Sugar.train.sport, x = ~sugar, y = ~rating, mode = 'markers', type="scatter",name = 'sport') %>%
+  #add_trace(data = Sugar.train.nosport, x = ~sugar, y = ~rating, mode = 'markers', type="scatter",name = 'nosport') %>%
+  #layout(title = 'Training data: Rating VS Sugar level for Sport active and inactive')
+
+lm3_t.sport = lm(rating ~ sugar, data = Sugar.train.sport)
+lm3_t.sport.summ = summary(lm3_t.sport)
+
+lm3_t.nosport = lm(rating ~ sugar, data = Sugar.train.nosport)
+lm3_t.nosport.summ = summary(lm3_t.nosport)
+
+# model 4
+
+lm4_t = lm(rating ~ sugar*sport, data = Sugar.train)
+lm4_t.summ = summary(lm4_t)
+#summary(lm4_t)
+#lm4_t.summ$adj.r.squared
+predict4_t = predict(lm4_t,Sugar.train)
+mse4_t = mean((predict4_t-Sugar.train$rating)^2)
+#mse4_t
+```
+
+Compare the adjusted R^2 
+<br>
+<br>
+```{r kable, echo=FALSE, eval=TRUE, cache=FALSE, tidy=TRUE, size='small', results="asis"}
+# pick the bigest Adj_R_sq
+
+mo = c('1','2','3-sport','3-nosport','4')
+adR_sq.t = c(lm1_t.summ$adj.r.squared,lm2_t.summ$adj.r.squared,lm3_t.sport.summ$adj.r.squared,lm3_t.nosport.summ$adj.r.squared,lm4_t.summ$adj.r.squared)
+Adj_R_sq.t = data.frame(mo,adR_sq.t)
+colnames(Adj_R_sq.t) = c('model','Adjusted R^2')
+#adj_Rsq_table = xtable(Adj_R_sq.t)
+#print(adj_Rsq_table, type = 'html')
+kable(Adj_R_sq.t)
+#View(Adj_R_sq.t)
+plot_ly(x = mo, y = adR_sq.t, type = 'bar')%>%
+  layout(title = 'Adjusted R^2 of each model')
+```
+<br>
+
+Obviously, model 4 (rating ~ sugar + sport + sugar*sport) has the largest adjusted R^2 and therefore is the best model among the four.
+<br>
+
+<br>
+Test the best model with the test data:
+
+<br>
+
+```{r, echo=FALSE, eval=TRUE, cache=FALSE, tidy=TRUE, size='small', results="asis"}
+
+# test the model
+predict_t = predict(lm4_t,Sugar.test)
+plot_ly(data = Sugar.test, x = ~sugar, y = ~rating, mode = 'markers', type="scatter",name = 'test data') %>%
+  add_trace(data = Sugar.test, x = ~sugar, y = predict_t, mode = 'markers', type="scatter",name = 'prediction') %>%
+  layout(title='Linear regression (traditional): rating ~ sugar + sport + sugar*sport')
+mse_t = mean((predict_t-Sugar.test$rating)^2)
+
+mse <- function(pred,data) {
+  return(mean((pred-data)^2))
+  }
+
+```
+<br>
+
+
+```{r, echo=FALSE, eval=TRUE, cache=FALSE, tidy=TRUE, size='small', results="asis"}
+
+cat("The MSE is: ", mse_t)
+```
+
+<br>
+
+
+Theoretically, the test data can only test one model. Try to fit all four models and compare the MSE (JUST A TRIAL):
+
+<br>
+```{r, echo=FALSE, eval=TRUE, cache=FALSE, tidy=TRUE, size='small', results="asis"}
+predict_t1 = predict(lm1_t,Sugar.test)
+predict_t2 = predict(lm2_t,Sugar.test)
+Sugar.test.sport = Sugar.test[which(Sugar.test$sport == TRUE),]
+Sugar.test.nosport = Sugar.test[which(Sugar.test$sport == FALSE),]
+predict_t3.sport = predict(lm3_t.sport,Sugar.test.sport)
+predict_t3.nosport = predict(lm3_t.nosport,Sugar.test.nosport)
+
+mse_t1 = mse(predict_t1,Sugar.test$rating)
+mse_t2 = mse(predict_t2,Sugar.test$rating)
+mse_t3.sport = mean((predict_t3.sport-Sugar.test.sport$rating)^2, na.rm = TRUE)
+mse_t3.nosport = mean((predict_t3.nosport-Sugar.test.nosport$rating)^2, na.rm = TRUE)
+mse_t3 = (mse_t3.sport*length(Sugar.test.sport$rating)+mse_t3.nosport*length(Sugar.test.nosport$rating))/length(Sugar.test$rating)
+
+```
+
+```{r, echo=FALSE, eval=TRUE, cache=FALSE, tidy=TRUE, size='small', results="asis"}
+
+cat("The MSE for model 1 is: ", mse_t1)
+```
+
+```{r, echo=FALSE, eval=TRUE, cache=FALSE, tidy=TRUE, size='small', results="asis"}
+
+cat("The MSE for model 2 is: ", mse_t2)
+```
+
+```{r, echo=FALSE, eval=TRUE, cache=FALSE, tidy=TRUE, size='small', results="asis"}
+
+cat("The MSE for model 3 is: ", mse_t3)
+```
+
+<br>
+An interesting thing is that the mse for model 3 is the same as model 4, Let take a look at this two model:
+
+<br>
+```{r, echo=FALSE, eval=TRUE, cache=FALSE, tidy=TRUE, size='small', results="asis"}
+stargazer(lm3_t.sport, type= 'html', title = 'Linear regression (sport): rating ~ sugar', header = FALSE)
+
+```
+
+<br>
+
+```{r, echo=FALSE, eval=TRUE, cache=FALSE, tidy=TRUE, size='small', results="asis"}
+stargazer(lm3_t.nosport, type= 'html', title = 'Linear regression (nosport): rating ~ sugar', header = FALSE)
+
+```
+
+<br>
+```{r, echo=FALSE, eval=TRUE, cache=FALSE, tidy=TRUE, size='small', results="asis"}
+stargazer(lm4_t, type= 'html', title = 'Linear regression: rating ~ sugar+sport+sugar*sport', header = FALSE)
+```
+
+<br>
+
+If the individual is sport active,   
+The model 4 is:  
+rating = 2.726 + 0.029 * sugar + 0.204 * 1 (sport = TRUE) - 0.051 * sugar * 1 (sport = TRUE) = 2.930 - 0.022 * sugar  
+model 3 is:  
+rating = 2.930 - 0.023 * sugar  
+<br>
+
+If the individual is sport inactive,   
+The model 4 is:  
+rating = 2.726 + 0.029 * sugar + 0.204 * 0 (sport = FALSE) - 0.051 * sugar * 0 (sport = FALSE) = 2.726 + 0.029 * sugar  
+model 3 is:  
+rating = 2.726 - 0.029 * sugar  
+<br>
+They are the same model. (Ignore the number rounding)
+
+<br>
+
+##### PS:   
+
+I also try train(30%)-validation(20%)-test(50%)  
+The result is similar.
+
+<br>
+```{r, echo=FALSE, eval=TRUE, cache=FALSE, tidy=TRUE, size='small', results="asis"}
+
+# 7.2 train-validation-test approach
+
+# deviding the training data to 60% (train) and 40% (validation):
+Sugar.train.t <- sample_frac(Sugar.train, 0.6)
+sid.v <- setdiff(rownames(Sugar.train),rownames(Sugar.train.t))
+Sugar.train.v <- Sugar.train[sid.v,]
+
+mse.tv<-c()
+# model 1 rating ~ sugar
+
+lm1_tv = lm(rating ~ sugar, data = Sugar.train.t)
+#summary(lm1_tv)
+predict1_tv = predict(lm1_tv, Sugar.train.v)
+mse.tv[1] = mse(predict1_tv, Sugar.train.v$rating)
+
+# model 2 rating ~ all
+lm2_tv = lm(rating ~ sugar+rowing_team+track_team+chess_club, data = Sugar.train.t)
+#summary(lm2_tv)
+predict2_tv = predict(lm2_tv, Sugar.train.v)
+mse.tv[2] = mse(predict2_tv, Sugar.train.v$rating)
+
+# model 3
+Sugar.train.t.sport = subset(Sugar.train.t, sport == TRUE)
+Sugar.train.t.nosport = subset(Sugar.train.t, sport == FALSE)
+
+#plot_ly(data = Sugar.train.t.sport, x = ~sugar, y = ~rating, mode = 'markers', type="scatter",name = 'sport') %>%
+  #add_trace(data = Sugar.train.t.nosport, x = ~sugar, y = ~rating, mode = 'markers', type="scatter",name = 'nosport') %>%
+  #layout(title = 'Train data: Rating VS Sugar level for Sport active and inactive')
+
+lm3_tv.sport = lm(rating ~ sugar, data = Sugar.train.t.sport)
+lm3_tv.sport.summ = summary(lm3_tv.sport)
+#lm3_tv.sport.summ
+
+lm3_tv.nosport = lm(rating ~ sugar, data = Sugar.train.t.nosport)
+lm3_tv.nosport.summ = summary(lm3_tv.nosport)
+#lm3_tv.nosport.summ
+
+Sugar.train.v.sport = subset(Sugar.train.v, sport == TRUE)
+Sugar.train.v.nosport = subset(Sugar.train.v, sport == FALSE)
+predict3_tv.sport = predict(lm3_tv.sport,Sugar.train.v.sport)
+predict3_tv.nosport = predict(lm3_tv.nosport,Sugar.train.v.nosport)
+
+mse.tv[3] = (mse(predict3_tv.sport,Sugar.train.v.sport$rating)*length(Sugar.train.v.sport$rating) + mse(predict3_tv.nosport,Sugar.train.v.nosport$rating)*length(Sugar.train.v.nosport$rating))/(length(Sugar.train.v$rating))
+
+# model 4
+
+lm4_tv = lm(rating ~ sugar*sport, data = Sugar.train.t)
+lm4_tv.summ = summary(lm4_tv)
+#lm4_tv.summ
+predict4_tv = predict(lm4_tv,Sugar.train.v)
+mse.tv[4] = mse(predict4_tv,Sugar.train.v$rating)
+
+# pick the least MSE: MODEL 4
+
+mo.tv = c('1','2','3','4')
+model.mse.tv = data.frame(mo.tv,mse.tv)
+colnames(model.mse.tv) = c('model','MSE')
+#View(model.mse.tv)
+
+# test the model
+
+predict_tvt = predict(lm4_tv,Sugar.test)
+plot_ly(data = Sugar.test, x = ~sugar, y = ~rating, mode = 'markers',type="scatter", name = 'test data') %>%
+  add_trace(data = Sugar.test, x = ~sugar, y = predict_tvt, mode = 'markers', type="scatter",name = 'prediction')%>%
+  layout(title='Linear regression (train-validation-test): rating ~ sugar + sport + sugar*sport')
+mse_tvt = mean((predict_tvt-Sugar.test$rating)^2)
+#mse_tvt
+```
+
+<br>
+```{r, echo=FALSE, eval=TRUE, cache=FALSE, tidy=TRUE, size='small', results="asis"}
+
+cat("The MSE is: ", mse_tvt)
+```
+<br>
+<br>
+
+#### 8. For your best model, what is a 99% confidence interval for the regression coefficients. Interpret the results.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, eval=solution.print}
+kable(confint(lm4_tv,level = 0.99))
+```
+<br>
+
+It means we can be 99% confident that the coefficients are within their interval [lowerbound(0.5%),upperbound(99.5%)]  
+
+<br>
+
+#### 9. For your best model, what is a 90% prediction interval if the sugar level was 25 and the student was not a member of any team. Interpret the results.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, eval=solution.print}
+kable(predict(lm4_tv,data.frame(sugar=25,sport=FALSE),interval="prediction", level = 0.9))
+```
+
+<br>
+It means that if the sugar level was 25 and the student was not a member of any team we can predict his rating as 'fit' and can be 90% confident that his rating is within [lwr,upr].
