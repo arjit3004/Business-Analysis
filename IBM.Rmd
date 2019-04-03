@@ -1,0 +1,330 @@
+---
+title: "HW2 Model Selection for trading strategy"
+author: "Zidong Liu"
+date: "10/12/2016"
+output: html_document
+---
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(knitr)
+library(ggplot2)
+library(plotly)
+library(dplyr)
+library(stargazer)
+library(plyr)
+library(leaps)
+library(ISLR)
+library(glmnet)
+library(htmlTable)
+
+```
+
+<br>
+<br>
+
+#### 1. Open the file ibm_return.csv in R and use the command summary to print a summary of the data.
+
+<br>
+
+```{r,echo=FALSE, eval=TRUE, cache=FALSE, tidy=TRUE, size='normalsize', results="asis",message=FALSE, warning=FALSE}
+setwd("E:/core/course/columbia course/16Fall/Business Analytics/hw/hw2")
+IBMData = read.csv("ibm_return.csv")
+IBMData$Date = as.Date(IBMData$Date,"%m/%d/%Y")
+#summary(IBMData)
+stargazer(IBMData,type= 'html', nobs = FALSE, mean.sd = TRUE, median = TRUE,
+          iqr = TRUE, header = FALSE, title = 'Summary of ibm_return.csv')
+#View(IBMData)
+cnames = colnames(IBMData)
+```
+<br>
+<br>
+
+#### 2. Divide your data into two parts: a training set (75%) and a test set (25%).
+<br>
+Divide the data with the following code:
+<br>
+<br>
+```{r echo=TRUE, eval=TRUE, cache=FALSE, tidy=TRUE, size='small', results="asis",message=FALSE, warning=FALSE}
+IBM.train = IBMData[1:round(0.75*length(IBMData$Date)),]
+IBM.test = IBMData[-as.numeric(rownames(IBM.train)),]
+#View(IBM.train)
+#summary(IBM.train)
+#summary(IBM.test)
+
+```
+
+Since the IBM return data is like a time series, each list of the data is sorted by the date from the early to the late. The data cannot be divided randomly since random sampling will make this order meaningless, distort the relations of adjacent data, and ignore the daily, monthly, seasonal or yearly patterns. And most importantly, the return(today) = price(tomorrow) - price(today), so if the order of series is broken, the return is also meaningless. 
+<br>
+<br>
+
+#### 3. Create 4 validation tests where you use 4 months of data to fit the model and then measure the performance on the following month. For each, use best subset selection to find the best model. Consider subsets of sizes from 1 to 8. Find the best subset size and the final model.
+<br>
+Check the break date in last step:
+<br>
+
+```{r echo=FALSE, eval=TRUE, cache=FALSE, tidy=TRUE, size='small', results="asis",message=FALSE, warning=FALSE}
+cat("The tail of training set is on ", toString(tail(IBM.train$Date,1)))
+cat(". The head of test set is on ", toString(IBM.test$Date[1]))
+```
+<br>
+
+In section 2 We divide the data by 3(training) : 1 (test). We find that the break is after 4/2/2016 and before 4/3/2016. To keep the data of the whole month in a same group, break the sample by 4/1/2016 with the following code:
+<br>
+
+```{r echo=TRUE, eval=TRUE, cache=FALSE, tidy=TRUE, size='small', results="asis",message=FALSE, warning=FALSE}
+IBM.train = subset(IBMData,IBMData$Date<"2013-4-1")
+IBM.test = subset(IBMData,IBMData$Date>="2013-4-1")
+```
+<br>
+<br>
+Divide the training set to 4 sets:  
+<br>            Validation:  
+(1) Train: 2012-07 ~ 2012-10; Validation: 2012-11.        
+(2) Train: 2012-08 ~ 2012-11; Validation: 2012-12.    
+(3) Train: 2012-09 ~ 2012-12; Validation: 2013-01.    
+(4) Train: 2012-10 ~ 2013-01; Validation: 2013-02.    
+
+<br>
+
+And apply the subset selection, test the performance on the validation sets and compare the MSEs:
+(4 training sets and size from 1 to 8 for each so 32 MSEs in total.)
+<br>
+
+```{r echo=FALSE, eval=TRUE, cache=FALSE, tidy=TRUE, size='small', results="asis",message=FALSE, warning=FALSE}
+# Check again.
+#tail(IBM.train$Date,1)
+#IBM.test$Date[1]
+
+# Group the training data by month
+IBM.train.split = split(IBM.train,f=strftime(IBM.train$Date,"%y-%m"))
+#View(IBM.train.split[1])
+
+# Create 4 validation tests and do the subset selection.
+IBM.train.v <- list()
+IBM.train.t <- list()
+
+sselect <- list()
+sselect.summary <- list()
+sselect.coef <- list()
+sselect.id <- c()
+sselect.predict <- list()
+sselect.mse <- c()
+sselect.vnum <- c()
+sselect.predict.all <- replicate(4, list())
+sselect.mse.all <- replicate(4, list()) 
+
+# define MSE function
+mse <- function(pred,data) {
+  return(mean((pred-data)^2))
+}
+
+#define predicting function to the regsubsets object
+predict.regsubsets <- function(object, newdata, id, ...) {
+  # object is the regsubsets object we want to predict from
+  # id is the id of the model
+  form = as.formula(object$call[[2]])
+  mat = model.matrix(form, newdata)
+  coefi = coef(object, id=id)
+  mat[,names(coefi)] %*% coefi
+}
+
+for (i in 1:4) {
+  # From the train and validation datasets:
+  IBM.train.t[[i]] <- do.call("rbind",lapply(IBM.train.split[i:(i+3)],data.frame))
+  IBM.train.v[[i]] <- do.call("rbind",lapply(IBM.train.split[i+4],data.frame))
+  
+  attach(IBM.train.t[[i]])
+  
+  # perform best subset selection
+  sselect[[i]] <- regsubsets(Return ~. -Date, data = IBM.train.t[[i]])
+  sselect.summary[[i]] <- summary(sselect[[i]])
+  sselect.id[i] <- which.max(sselect.summary[[i]]$adjr2)
+  sselect.coef[[i]] <- coef(sselect[[i]],sselect.id[i])
+  
+  sselect.predict[[i]] <- predict.regsubsets(sselect[[i]],IBM.train.v[[i]],sselect.id[i])
+  sselect.mse[i] <- mse(sselect.predict[[i]],IBM.train.v[[i]]$Return)
+  sselect.vnum[i] <- length(sselect.coef[[i]]) - 1
+  
+  
+  for (j in 1:8) {
+    sselect.predict.all[[i]][[j]] <- predict.regsubsets(sselect[[i]],IBM.train.v[[i]],j)
+    sselect.mse.all[[i]][[j]] <- mse(sselect.predict.all[[i]][[j]],IBM.train.v[[i]]$Return)
+  }
+  
+  detach(IBM.train.t[[i]])
+}
+
+#sselect.mse
+sselect.id.best = which.min(sselect.mse)
+#sselect.vnum
+#sselect.coef[[sselect.id.best]]
+sselect.mse.matrix = do.call("rbind",sselect.mse.all)
+#sselect.mse.matrix
+sselect.mse.table = data.frame(sselect.mse.matrix)
+colnames(sselect.mse.table) = c('1','2','3','4','5','6','7','8')
+rownames(sselect.mse.table) = c('Set 1','Set 2','Set 3','Set 4')
+kable(sselect.mse.table)
+#min(unlist(sselect.mse.all))
+sselect.order = which.min(unlist(sselect.mse.all))
+sselect.id_x = ceiling(sselect.order/8)
+sselect.id_y = sselect.order%%8
+```
+
+<br>
+
+The smallest MSE is 0.4126211, so the best one is the third in set 2.  
+The coefficients:  
+<br>
+
+```{r echo=FALSE, eval=TRUE, cache=FALSE, tidy=TRUE, size='small', results="asis",message=FALSE, warning=FALSE}
+coef.table.s = data.frame(coef(sselect[[2]],3))
+colnames(coef.table.s) = c('Coefficient')
+kable(coef.table.s)
+```
+
+The model is:    
+Return = 0.0835 + 1.1644 X3W + 1.4641 X1M - 29.61 X6m   
+For this model the size is 3.  
+<br>
+
+#### 4. On the same 4 validation tests, use lasso regression to find the best model. Consider the values 0, .001, .01, .1, 1, 10, 100, 1000 for lambda. Choose the best lambda and final model.
+<br>
+Similar to Step 3, apply the lasso regression, test the performance on the validation sets and compare the MSEs:
+(4 training sets and size from 1 to 8 for each so 32 MSEs in total.)
+<br>
+
+```{r echo=FALSE, eval=TRUE, cache=FALSE, tidy=TRUE, size='small', results="asis",message=FALSE, warning=FALSE}
+lasso <- list()
+x <- list()
+y <- list()
+grid <- c()
+cv.lasso <- list()
+best_lambda <- list()
+grid=append(0,10^seq(-3,3))
+lasso.predict <- replicate(length(IBM.train.t), list())
+lasso.mse <- replicate(length(IBM.train.t), list())
+
+predict.lasso <- function(object, newdata, id, ...) {
+  # object is the lasso object we want to predict from
+  # id is the id of the model
+  form = as.formula(object$call[[2]][[2]][[2]])
+  mat = model.matrix(form, newdata)
+  coefi = coef(object)[,id]
+  mat[,names(coefi)] %*% coefi
+}
+
+for (i in 1:4) {
+  attach(IBM.train.t[[i]])
+  # perform lasso:
+  x[[i]] <- model.matrix(Return ~ . - Date, IBM.train.t[[i]])[,-1]
+  y[[i]] <- IBM.train.t[[i]]$Return
+  lasso[[i]] <- glmnet(model.matrix(Return ~ . - Date, IBM.train.t[[i]])[,-1],y[[i]],alpha=1,lambda=grid)
+  
+  for (j in 1:length(grid)) {
+    lasso.predict[[i]][[j]] <- predict.lasso(lasso[[i]],IBM.train.v[[i]],j)
+    lasso.mse[[i]][[j]] <- mse(lasso.predict[[i]][[j]],IBM.train.v[[i]]$Return)
+  }
+  
+  cv.lasso[[i]] <- cv.glmnet(x[[i]],y[[i]],alpha=1)
+  best_lambda[[i]] <- cv.lasso[[i]]$lambda.min
+  detach(IBM.train.t[[i]])
+}
+
+lasso.mse.matrix = do.call("rbind",lasso.mse)
+lasso.mse.table <- data.frame(lasso.mse.matrix)
+#min(unlist(lasso.mse))
+lasso.order = which.min(unlist(lasso.mse))
+lasso.id_x = ceiling(lasso.order/length(grid))
+lasso.id_y = lasso.order %% length(grid)
+colnames(lasso.mse.table) = c("lambda = 0","0.001","0.01","0.1","1","10","100","1000")
+rownames(lasso.mse.table) = c('Set 1','Set 2','Set 3','Set 4')
+kable(lasso.mse.table)
+```
+
+<br>
+The smallest MSE is 0.4413, so the best one is the fifth in set 2.    
+The lambda here we choose is 1.  
+The coefficients:  
+<br>
+
+```{r echo=FALSE, eval=TRUE, cache=FALSE, tidy=TRUE, size='small', results="asis",message=FALSE, warning=FALSE}
+coef.table.l = data.frame(coef(lasso[[2]])[,5])
+colnames(coef.table.l) = c('Coefficient')
+kable(coef.table.l)
+```
+
+The model is:    
+Return = 0.023 + 0.093 X1D + 0.0107 X3W - 1.067 X4M - 3.731 X6M + 0.043 X1Y   
+<br>
+
+#### 5. Pick one of the two models final models from the previous two questions. Check the MSE of your model on the test data? Compare to the MSE on the validation tests.
+<br>
+Choose the best lasso regression model (with lambda = 1 on training set 2):
+<br>
+Return = 0.023 + 0.093 X1D + 0.0107 X3W - 1.067 X4M - 3.731 X6M + 0.043 X1Y  
+<br>
+Test it on the test data set:  
+<br>
+```{r echo=FALSE, eval=TRUE, cache=FALSE, tidy=TRUE, size='small', results="asis",message=FALSE, warning=FALSE}
+#min(unlist(lasso.mse))
+#min(unlist(sselect.mse.all))
+
+#test.predict1 <- predict.regsubsets(sselect[[sselect.id_x]],IBM.test,sselect.id_y)
+#test.mse1 <- mse(test.predict1,IBM.test$Return)
+
+test.predict2 <- predict.lasso(lasso[[lasso.id_x]],IBM.test,lasso.id_y)
+test.mse2 <- mse(test.predict2,IBM.test$Return)
+cat("The test MSE is ",test.mse2)
+```
+<br>
+The test MSE is greater thatn the training MSE since usually the out-of-sample test has more errors because of the difference betweent the sample sets and the fact that the model minimize the training set's mse, not necessarily test sets'. We hope it perform well on the test set too.   
+<br>
+<br>
+
+#### 6. Create a trading strategy from the model you picked. Start with $1 of investment and every day select to go either long or short according to the prediction of the model. Check and discuss the return of this trading strategy on the test data.
+
+<br>
+The performance of this portfolio on 3-month test set compared to just holding the IBM stock:   
+<br>
+```{r echo=FALSE, eval=TRUE, cache=FALSE, tidy=TRUE, size='small', results="asis",message=FALSE, warning=FALSE}
+attach(IBM.test)
+
+# constract portfolio choices from expected return
+# the Long-Short porfolio is 1 (long) when predict return is positive, and -1 when it is negative
+porfolio_Long_Short = sign(test.predict2)
+
+# Return for our portfolio over the test period
+# daily return is porfolio_Long_Short * Return, and we need to translate that to pct change and multiply across all days
+outOfSamplePerfomance = 1+porfolio_Long_Short * Return/100
+APR.port = prod(outOfSamplePerfomance)
+
+#length(outOfSamplePerfomance)
+
+# Return for just holding IBM over the test period
+IBM_long_return_train= 1+Return/100
+APR.hold = prod(IBM_long_return_train)
+#length(IBM_long_return_train)
+#length(IBM.test$Date)
+
+myport <- c()
+hold <- c()
+for (i in 1:length(outOfSamplePerfomance)) {
+  myport[i] = prod(outOfSamplePerfomance[1:i])
+  hold[i] = prod(IBM_long_return_train[1:i])
+}
+
+IBM.return <- data.frame(Date, hold, myport)
+
+
+plot_ly(data = IBM.return, x = ~Date, y = ~hold, type = 'scatter', mode = 'lines+markers', name = 'Holding IBM') %>%
+  add_trace(y = ~myport, name = 'My portfolio') %>%
+  layout(title = "Performance: My portfolio VS Just holding", yaxis = list (title = "Return"))
+
+```
+<br>
+```{r echo=FALSE, eval=TRUE, cache=FALSE, tidy=TRUE, size='small', results="asis",message=FALSE, warning=FALSE}
+cat("Invest $1, the final return of this portfolio is $",APR.port)
+cat(". While just holding IBM stock only gives you $", APR.hold)
+```
+<br>
+Based on the result, we can use this strategy to earn more returns.
